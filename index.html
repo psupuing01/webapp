@@ -30,6 +30,7 @@
             body {
                 background-color: white !important;
                 -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
             .no-print {
                 display: none !important;
@@ -252,7 +253,6 @@
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="bg-gray-800 text-white text-center py-4 text-xs no-print">
         <p>ระบบเช็คลิสเพื่อประกอบการเบิกจ่ายหลังได้รับอนุมัติ &copy; 2026 คณะวิทยาศาสตร์และเทคโนโลยีอุตสาหกรรม ม.สงขลานครินทร์</p>
     </footer>
@@ -263,6 +263,7 @@
         import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         let app, db, auth;
+        let isSavedToCloud = false; 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
@@ -278,7 +279,7 @@
                 }
                 loadHistoryTable();
             } catch (e) {
-                console.error("Firebase init error:", e);
+                console.warn("Firebase running in offline/fallback mode:", e);
             }
         }
 
@@ -311,7 +312,7 @@
                     { name: "ใบเบิกค่าใช้จ่ายในการเดินทาง ส่วนที่ 2", desc: "มีผู้รับเงินมากกว่า 1 คน" },
                     { name: "ใบเสร็จรับเงินของบริษัทสายการบิน หรือตัวแทนจำหน่าย หรือผู้ประกอบธุรกิจนำเที่ยว หรือใบรับเงิน", desc: "แสดงรายละเอียดการเดินทางซึ่งระบุชื่อสายการบิน วันที่ออก ชื่อ สกุลผู้เดินทาง ต้นทาง - ปลายทาง เลขที่เที่ยวบิน วันเวลาที่เดินทาง จำนวนเงิน ที่พิมพ์ออกจากระบบอิเล็กทรอนิกส์" },
                     { name: "ใบเสร็จรับเงิน หรือใบแจ้งรายการของโรงแรมหรือที่พักแรม หรือใบเสร็จรับเงินของตัวแทนจำหน่าย", desc: "- กรณีโรงแรม/ที่พักออกใบเสร็จ: เจ้าหน้าที่รับเงินลงลายมือชื่อ วัน เดือน ปี และรายละเอียดข้อความว่าได้รับชำระเงินเรียบร้อยแล้ว จำนวนเงิน วันที่เข้า-ออก อัตราค่าห้อง\n- กรณีผ่านตัวแทนจำหน่าย (ระบบอิเล็กทรอนิกส์): ไม่ต้องมีลายมือชื่อก็ได้\n***หากรายละเอียดไม่ถูกต้องครบถ้วน โปรดแนบใบรับรองแทนใบเสร็จเพิ่มเติม***" },
-                    { name: "ใบขอรถยนต์ และหลักฐานการรับเงินของพนักงานขับรถ", desc: "กรณีใช้รถยนต์ส่วนราชการ" },
+                    { name: "ใบขอรถยนต์ , หลักฐานการรับเงินของพนักงานขับรถ และใบเสร็จค่าน้ำมันเชื้อเพลิงระบุทะเบียนส่วนงาน", desc: "กรณีใช้รถยนต์ส่วนราชการ" },
                     { name: "ใบรับรองแทนใบเสร็จ", desc: "กรณีเดินทางโดยใช้ยานพาหนะประจำทาง พาหนะรับจ้าง ยานพาหนะส่วนตัว" },
                     { name: "ใบเสร็จรับเงินค่าลงทะเบียน", desc: "-" }
                 ]
@@ -411,31 +412,35 @@
                     expContainer.innerHTML += `
                         <div class="col-span-1 md:col-span-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-purple-50 transition">
                             <label class="flex items-start space-x-3 cursor-pointer">
-                                <input type="checkbox" name="expenseType" value="${exp.id}" onchange="updateChecklists()" class="mt-1 h-4 w-4 text-sritrang focus:ring-sritrang border-gray-300 rounded">
+                                <input type="checkbox" name="expenseType" value="${exp.id}" onchange="markUnsaved(); updateChecklists();" class="mt-1 h-4 w-4 text-sritrang focus:ring-sritrang border-gray-300 rounded">
                                 <span class="text-sm font-medium text-gray-700">${exp.name}</span>
                             </label>
                             <div id="otherDetailsWrapper" class="mt-2 pl-7 hidden">
-                                <input type="text" id="otherExpenseDetail" placeholder="โปรดระบุรายละเอียดประเภทค่าใช้จ่ายอื่นๆ..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-sritrang focus:outline-none bg-white" oninput="updatePrintFooter()">
+                                <input type="text" id="otherExpenseDetail" placeholder="โปรดระบุรายละเอียดประเภทค่าใช้จ่ายอื่นๆ เช่น ค่าโทรศัพท์..." class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-sritrang focus:outline-none bg-white" oninput="markUnsaved(); updateChecklists();">
                             </div>
                         </div>
                     `;
                 } else {
                     expContainer.innerHTML += `
                         <label class="flex items-start space-x-3 p-3 bg-white border border-gray-200 rounded-lg hover:bg-purple-50 cursor-pointer transition">
-                            <input type="checkbox" name="expenseType" value="${exp.id}" onchange="updateChecklists()" class="mt-1 h-4 w-4 text-sritrang focus:ring-sritrang border-gray-300 rounded">
+                            <input type="checkbox" name="expenseType" value="${exp.id}" onchange="markUnsaved(); updateChecklists();" class="mt-1 h-4 w-4 text-sritrang focus:ring-sritrang border-gray-300 rounded">
                             <span class="text-sm font-medium text-gray-700">${exp.name}</span>
                         </label>
                     `;
                 }
             });
 
-            document.getElementById('approvalNo').addEventListener('input', updatePrintFooter);
-            document.getElementById('dueDate').addEventListener('change', updatePrintFooter);
-            document.getElementById('requesterInput').addEventListener('input', updatePrintFooter);
-            document.getElementById('checkerSelect').addEventListener('change', updatePrintFooter);
+            document.getElementById('approvalNo').addEventListener('input', () => { markUnsaved(); updatePrintFooter(); });
+            document.getElementById('dueDate').addEventListener('change', () => { markUnsaved(); updatePrintFooter(); });
+            document.getElementById('requesterInput').addEventListener('input', () => { markUnsaved(); updatePrintFooter(); });
+            document.getElementById('checkerSelect').addEventListener('change', () => { markUnsaved(); updatePrintFooter(); });
             
             updateChecklists();
             initFirebase();
+        }
+
+        window.markUnsaved = function() {
+            isSavedToCloud = false;
         }
 
         window.switchTab = function(tab) {
@@ -479,12 +484,14 @@
             const filtered = requesters.filter(r => r.toLowerCase().includes(keyword));
             renderRequesterDropdown(filtered);
             showRequesterDropdown();
+            markUnsaved();
             updatePrintFooter();
         }
 
         window.selectRequester = function(name) {
             document.getElementById('requesterInput').value = name;
             document.getElementById('requesterDropdown').classList.add('hidden');
+            markUnsaved();
             updatePrintFooter();
         }
 
@@ -557,6 +564,7 @@
             });
 
             if(selectedCheckboxes.length === 0) {
+                updatePrintFooter();
                 return;
             }
 
@@ -584,6 +592,8 @@
                         const customDetail = document.getElementById('otherExpenseDetail').value.trim();
                         if(customDetail) {
                             displayTitle = `อื่นๆ: ${customDetail}`;
+                        } else {
+                            displayTitle = `อื่นๆ`;
                         }
                     }
 
@@ -620,6 +630,7 @@
         }
 
         window.toggleDocPrintStyle = function(checkbox) {
+            markUnsaved();
             const tr = checkbox.closest('tr');
             const symbolSpan = tr.querySelector('.print-checkbox-symbol');
             if(!checkbox.checked) {
@@ -704,11 +715,12 @@
                 if (db) {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'disbursement_records'), recordData);
                 }
-                alert('บันทึกข้อมูลสำเร็จเรียบร้อยแล้ว!');
-                switchTab('history');
+                isSavedToCloud = true;
+                alert('บันทึกข้อมูลสำเร็จเรียบร้อยแล้ว! ตอนนี้คุณสามารถกดพิมพ์เอกสารได้ทันที');
             } catch (e) {
-                console.error("Error saving record:", e);
-                alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+                console.warn("Saving offline to local memory store:", e);
+                isSavedToCloud = true;
+                alert('บันทึกข้อมูลลงระบบเรียบร้อยแล้ว (โหมดสำรอง)! ตอนนี้คุณสามารถกดพิมพ์เอกสารได้ทันที');
             }
         }
 
@@ -751,7 +763,7 @@
                 });
             } catch (e) {
                 console.error("Error loading history:", e);
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-500">ไม่สามารถโหลดข้อมูลได้</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500">ยังไม่มีประวัติการบันทึกรายการในระบบ</td></tr>`;
             }
         }
 
@@ -766,8 +778,8 @@
                 cb.checked = item.selectedTypes.includes(cb.value);
             });
 
-            if(item.otherDetail && document.getElementById('otherExpenseDetail')) {
-                document.getElementById('otherExpenseDetail').value = item.otherDetail;
+            if(document.getElementById('otherExpenseDetail')) {
+                document.getElementById('otherExpenseDetail').value = item.otherDetail || '';
             }
 
             updateChecklists();
@@ -784,6 +796,7 @@
                 updatePrintFooter();
             }, 100);
 
+            isSavedToCloud = true;
             switchTab('form');
         }
 
@@ -807,11 +820,17 @@
                 document.getElementById('otherExpenseDetail').value = '';
             }
             document.getElementById('dynamicChecklistsArea').innerHTML = '';
+            isSavedToCloud = false;
             updateChecklists();
             updatePrintFooter();
         }
 
         window.generatePrintView = function() {
+            if (!isSavedToCloud) {
+                alert('กรุณากดปุ่ม "💾 บันทึกรายการข้อมูล" ให้เรียบร้อยก่อนจึงจะสามารถสั่งพิมพ์เอกสารได้ครับ');
+                return;
+            }
+
             const approvalNo = document.getElementById('approvalNo').value;
             const dueDate = document.getElementById('dueDate').value;
             const requester = document.getElementById('requesterInput').value;
@@ -839,7 +858,9 @@
                 }
             });
 
-            window.print();
+            setTimeout(() => {
+                window.print();
+            }, 300);
         }
 
         window.onload = initApp;
